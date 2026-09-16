@@ -17,13 +17,12 @@ export default function App() {
   const [rawSixList, setRawSixList] = useState<string[]>([]);
   const [rawSevenList, setRawSevenList] = useState<string[]>([]);
   
-  const [executivesInput, setExecutivesInput] = useState<string>("박지헌, 강정은, 김민우, 심영진, 윤지상");
+  const [executivesInput, setExecutivesInput] = useState<string>("안형준, 박지헌, 고다성, 강정은, 윤지상, 임유찬");
 
   const shuffleArray = <T,>(array: T[]): T[] => {
     return [...array].sort(() => Math.random() - 0.5);
   };
 
-  // ⭐️ 완벽하게 수정된 임원진 & 대기팀 배정 알고리즘
   const generateTeamsWithExecutives = (list: string[]): TeamData => {
     const execList = executivesInput.split(',').map(name => name.trim()).filter(Boolean);
     const isExecutive = (fullName: string) => execList.some(exec => fullName.includes(exec));
@@ -31,44 +30,39 @@ export default function App() {
     const execs = shuffleArray(list.filter(isExecutive));
     const regulars = shuffleArray(list.filter(name => !isExecutive(name)));
 
-    const MAX_MAIN = 24; // 정규팀 최대 인원 (12팀 * 2명)
+    const MAX_MAIN = 24; 
     const mainExecs: string[] = [];
     const mainRegulars: string[] = [];
     const waitRoster: string[] = [];
 
-    // 1. 임원진 우선 배정 (정규팀에 무조건 먼저 넣기)
     while (execs.length > 0) {
       if (mainExecs.length < MAX_MAIN) {
         mainExecs.push(execs.pop()!);
       } else {
-        waitRoster.push(execs.pop()!); // (임원진이 24명이 넘는 비정상적인 경우에만 대기로 감)
+        waitRoster.push(execs.pop()!); 
       }
     }
 
-    // 2. 남은 정규팀 자리에 일반 멤버 배정
     while (regulars.length > 0) {
       if (mainExecs.length + mainRegulars.length < MAX_MAIN) {
         mainRegulars.push(regulars.pop()!);
       } else {
-        waitRoster.push(regulars.pop()!); // 24명 초과 시 대기 명단으로 직행
+        waitRoster.push(regulars.pop()!); 
       }
     }
 
-    // 3. 정규팀 방 만들기 (최대 12팀)
     const mainTeams: string[][] = [];
     const numMainTeams = Math.ceil((mainExecs.length + mainRegulars.length) / 2);
     for (let i = 0; i < numMainTeams; i++) {
       mainTeams.push([]);
     }
 
-    // 4. 정규팀에 임원진 1명씩 먼저 분산 배치
     let teamIndex = 0;
     while (mainExecs.length > 0) {
       mainTeams[teamIndex % numMainTeams].push(mainExecs.pop()!);
       teamIndex++;
     }
 
-    // 5. 일반 멤버로 정규팀 빈자리(2번째 자리) 채우기
     while (mainRegulars.length > 0) {
       let placed = false;
       for (let i = 0; i < numMainTeams; i++) {
@@ -81,10 +75,8 @@ export default function App() {
       if (!placed) break; 
     }
 
-    // 6. 완성된 정규 팀 순서 무작위 섞기 (특정 임원진이 항상 1팀에 있는 것 방지)
     const finalMainTeams = shuffleArray(mainTeams);
 
-    // 7. 대기 팀 배정 (남은 인원들끼리 2명씩 묶기)
     const shuffledWait = shuffleArray(waitRoster);
     const finalWaitTeams: string[][] = [];
     for (let i = 0; i < shuffledWait.length; i += 2) {
@@ -124,6 +116,9 @@ export default function App() {
         if (type.includes('7시')) sevenList.push(name);
         if (type.includes('회식')) dinnerList.push(name);
       });
+
+      // ⭐️ 회식 명단 가나다순(오름차순) 정렬 추가
+      dinnerList.sort((a, b) => a.localeCompare(b, 'ko-KR'));
 
       setRawSixList(sixList);
       setRawSevenList(sevenList);
@@ -328,7 +323,7 @@ export default function App() {
             value={executivesInput}
             onChange={(e) => setExecutivesInput(e.target.value)}
             className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="예: 박지헌, 강정은, 김민우, 심영진, 윤지상"
+            placeholder="예: 안형준, 박지헌, 고다성"
           />
           <p className="text-sm text-gray-500 mt-2">
             * 이곳에 입력된 임원진은 <b>서로 같은 팀이 되지 않도록 1명씩 분산 배치</b>되며 <b>무조건 정규 팀(우선)으로 배정</b>됩니다.
