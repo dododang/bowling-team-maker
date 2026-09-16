@@ -55,7 +55,7 @@ export default function App() {
     
     return {
       mainTeams: finalTeams.slice(0, maxTeams),
-      waitTeams: finalTeams.slice(maxTeams),
+      waitTeams: finalTeams.slice(maxTeams), // 12팀 초과 인원은 대기로 분리
       total: list.length,
     };
   };
@@ -125,65 +125,82 @@ export default function App() {
       titleRow.alignment = { horizontal: 'center', vertical: 'middle' };
       ws.mergeCells(`A${titleRow.number}:D${titleRow.number}`);
 
-      const chunkedTeams = [];
-      for (let i = 0; i < data.mainTeams.length; i += 4) {
-        chunkedTeams.push(data.mainTeams.slice(i, i + 4));
-      }
+      // ⭐️ 엑셀 표 렌더링을 묶어주는 내부 함수 (정규팀, 대기팀 공통 사용)
+      const renderChunk = (teams: string[][], isWait: boolean) => {
+        const chunkedTeams = [];
+        for (let i = 0; i < teams.length; i += 4) {
+          chunkedTeams.push(teams.slice(i, i + 4));
+        }
 
-      let laneOffset = 1;
-      chunkedTeams.forEach(chunk => {
-        const laneHeaders = ["", "", "", ""];
-        const members1 = ["", "", "", ""];
-        const members2 = ["", "", "", ""];
+        let offset = 1;
+        chunkedTeams.forEach(chunk => {
+          const laneHeaders = ["", "", "", ""];
+          const members1 = ["", "", "", ""];
+          const members2 = ["", "", "", ""];
 
-        chunk.forEach((team, idx) => {
-          laneHeaders[idx] = `${laneOffset + idx} 레인`;
-          members1[idx] = team[0] || "";
-          members2[idx] = team[1] || "";
-        });
+          chunk.forEach((team, idx) => {
+            laneHeaders[idx] = isWait ? `대기 ${offset + idx}팀` : `${offset + idx} 레인`;
+            members1[idx] = team[0] || "";
+            members2[idx] = team[1] || "";
+          });
 
-        const applyStyle = (row: ExcelJS.Row, isHeader: boolean) => {
-          row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-            if (colNumber <= 4 && laneHeaders[colNumber - 1] !== "") {
-              cell.alignment = { horizontal: 'center', vertical: 'middle' };
-              cell.border = {
-                top: { style: 'thin' }, left: { style: 'thin' },
-                bottom: { style: 'thin' }, right: { style: 'thin' }
-              };
-              if (isHeader) cell.font = { bold: true };
+          const applyStyle = (row: ExcelJS.Row, isHeader: boolean) => {
+            row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+              if (colNumber <= 4 && laneHeaders[colNumber - 1] !== "") {
+                cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                cell.border = {
+                  top: { style: 'thin' }, left: { style: 'thin' },
+                  bottom: { style: 'thin' }, right: { style: 'thin' }
+                };
+                if (isHeader) {
+                  cell.font = { bold: true, color: isWait ? { argb: 'FF666666' } : undefined };
+                  if (isWait) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F5F5' } };
+                }
+              }
+            });
+          };
+
+          const hRow = ws.addRow(laneHeaders);
+          applyStyle(hRow, true);
+
+          const m1Row = ws.addRow(members1);
+          applyStyle(m1Row, false);
+          m1Row.eachCell((cell, colNum) => {
+            if (members1[colNum - 1] && isExecutive(members1[colNum - 1])) {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC6E0B4' } }; 
             }
           });
-        };
 
-        const hRow = ws.addRow(laneHeaders);
-        applyStyle(hRow, true);
+          const m2Row = ws.addRow(members2);
+          applyStyle(m2Row, false);
+          m2Row.eachCell((cell, colNum) => {
+            if (members2[colNum - 1] && isExecutive(members2[colNum - 1])) {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC6E0B4' } }; 
+            }
+          });
 
-        const m1Row = ws.addRow(members1);
-        applyStyle(m1Row, false);
-        m1Row.eachCell((cell, colNum) => {
-          if (members1[colNum - 1] && isExecutive(members1[colNum - 1])) {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC6E0B4' } }; 
-          }
+          ws.addRow([]); 
+          offset += chunk.length;
         });
+      };
 
-        const m2Row = ws.addRow(members2);
-        applyStyle(m2Row, false);
-        m2Row.eachCell((cell, colNum) => {
-          if (members2[colNum - 1] && isExecutive(members2[colNum - 1])) {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC6E0B4' } }; 
-          }
-        });
+      // 정규 팀 엑셀 출력
+      renderChunk(data.mainTeams, false);
 
-        ws.addRow([]); 
-        laneOffset += chunk.length;
-      });
+      // ⭐️ 대기 팀 엑셀 출력 (누락되었던 부분)
+      if (data.waitTeams.length > 0) {
+        const waitTitleRow = ws.addRow(["[ 대기 팀 편성 ]", "", "", ""]);
+        waitTitleRow.font = { bold: true, color: { argb: 'FF555555' } };
+        ws.mergeCells(`A${waitTitleRow.number}:D${waitTitleRow.number}`);
+        renderChunk(data.waitTeams, true);
+      }
+
       ws.addRow([]); 
     };
 
     addTimeSection("6시", sixData);
     addTimeSection("7시", sevenData);
 
-    // ⭐️ 엑셀에도 회식 인원 데이터 반영
     if (dinnerData.length > 0) {
       const dinnerTitleRow = ws.addRow(["회식 참여 인원", "", "", ""]);
       dinnerTitleRow.font = { bold: true, size: 14 };
@@ -235,6 +252,29 @@ export default function App() {
           </div>
         ))}
       </div>
+
+      {/* ⭐️ 누락되었던 대기 팀 웹 화면 출력 복구 */}
+      {data.waitTeams.length > 0 && (
+        <>
+          <h3 className="font-bold text-gray-500 mb-3 text-lg border-b pb-2 mt-8">
+            [ 대기 팀 편성 - 총 {data.waitTeams.length}팀 ]
+          </h3>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-6">
+            {data.waitTeams.map((team, idx) => (
+              <div key={idx} className="p-4 bg-gray-50 border border-gray-200 rounded-lg shadow-sm">
+                <span className="font-bold text-gray-500 block mb-1">대기 {idx + 1}팀</span>
+                <span className="text-gray-600 font-medium">
+                  {team.map((member, i) => (
+                    <span key={i} className={executivesInput.includes(member.split(' ')[0]) ? "bg-green-200 px-1 rounded mr-1" : "mr-1"}>
+                      {member}
+                    </span>
+                  ))}
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 
@@ -296,7 +336,6 @@ export default function App() {
             {renderTeamSection('6시', sixData)}
             {renderTeamSection('7시', sevenData)}
 
-            {/* ⭐️ 누락되었던 회식 인원 UI 복구 */}
             <div className="p-6 bg-white rounded-lg shadow-md border-t-4 border-orange-400">
               <h2 className="text-2xl font-bold mb-4 text-orange-600">
                 🍻 회식 참여 인원 (총 {dinnerData.length}명)
