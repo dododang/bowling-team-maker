@@ -23,6 +23,7 @@ export default function App() {
     return [...array].sort(() => Math.random() - 0.5);
   };
 
+  // ⭐️ 완벽하게 수정된 임원진 & 대기팀 배정 알고리즘
   const generateTeamsWithExecutives = (list: string[]): TeamData => {
     const execList = executivesInput.split(',').map(name => name.trim()).filter(Boolean);
     const isExecutive = (fullName: string) => execList.some(exec => fullName.includes(exec));
@@ -30,32 +31,69 @@ export default function App() {
     const execs = shuffleArray(list.filter(isExecutive));
     const regulars = shuffleArray(list.filter(name => !isExecutive(name)));
 
-    const teams: string[][] = [];
+    const MAX_MAIN = 24; // 정규팀 최대 인원 (12팀 * 2명)
+    const mainExecs: string[] = [];
+    const mainRegulars: string[] = [];
+    const waitRoster: string[] = [];
 
-    while (execs.length > 0 || regulars.length > 0) {
-      const team: string[] = [];
-      
-      if (execs.length > 0) {
-        team.push(execs.pop()!);
+    // 1. 임원진 우선 배정 (정규팀에 무조건 먼저 넣기)
+    while (execs.length > 0) {
+      if (mainExecs.length < MAX_MAIN) {
+        mainExecs.push(execs.pop()!);
       } else {
-        team.push(regulars.pop()!);
+        waitRoster.push(execs.pop()!); // (임원진이 24명이 넘는 비정상적인 경우에만 대기로 감)
       }
-      
-      if (regulars.length > 0) {
-        team.push(regulars.pop()!);
-      } else if (execs.length > 0) {
-        team.push(execs.pop()!);
-      }
-
-      teams.push(team);
     }
 
-    const finalTeams = shuffleArray(teams);
-    const maxTeams = 12; 
-    
+    // 2. 남은 정규팀 자리에 일반 멤버 배정
+    while (regulars.length > 0) {
+      if (mainExecs.length + mainRegulars.length < MAX_MAIN) {
+        mainRegulars.push(regulars.pop()!);
+      } else {
+        waitRoster.push(regulars.pop()!); // 24명 초과 시 대기 명단으로 직행
+      }
+    }
+
+    // 3. 정규팀 방 만들기 (최대 12팀)
+    const mainTeams: string[][] = [];
+    const numMainTeams = Math.ceil((mainExecs.length + mainRegulars.length) / 2);
+    for (let i = 0; i < numMainTeams; i++) {
+      mainTeams.push([]);
+    }
+
+    // 4. 정규팀에 임원진 1명씩 먼저 분산 배치
+    let teamIndex = 0;
+    while (mainExecs.length > 0) {
+      mainTeams[teamIndex % numMainTeams].push(mainExecs.pop()!);
+      teamIndex++;
+    }
+
+    // 5. 일반 멤버로 정규팀 빈자리(2번째 자리) 채우기
+    while (mainRegulars.length > 0) {
+      let placed = false;
+      for (let i = 0; i < numMainTeams; i++) {
+        if (mainTeams[i].length < 2) {
+          mainTeams[i].push(mainRegulars.pop()!);
+          placed = true;
+          break;
+        }
+      }
+      if (!placed) break; 
+    }
+
+    // 6. 완성된 정규 팀 순서 무작위 섞기 (특정 임원진이 항상 1팀에 있는 것 방지)
+    const finalMainTeams = shuffleArray(mainTeams);
+
+    // 7. 대기 팀 배정 (남은 인원들끼리 2명씩 묶기)
+    const shuffledWait = shuffleArray(waitRoster);
+    const finalWaitTeams: string[][] = [];
+    for (let i = 0; i < shuffledWait.length; i += 2) {
+      finalWaitTeams.push(shuffledWait.slice(i, i + 2));
+    }
+
     return {
-      mainTeams: finalTeams.slice(0, maxTeams),
-      waitTeams: finalTeams.slice(maxTeams), // 12팀 초과 인원은 대기로 분리
+      mainTeams: finalMainTeams,
+      waitTeams: finalWaitTeams,
       total: list.length,
     };
   };
@@ -125,7 +163,6 @@ export default function App() {
       titleRow.alignment = { horizontal: 'center', vertical: 'middle' };
       ws.mergeCells(`A${titleRow.number}:D${titleRow.number}`);
 
-      // ⭐️ 엑셀 표 렌더링을 묶어주는 내부 함수 (정규팀, 대기팀 공통 사용)
       const renderChunk = (teams: string[][], isWait: boolean) => {
         const chunkedTeams = [];
         for (let i = 0; i < teams.length; i += 4) {
@@ -184,10 +221,8 @@ export default function App() {
         });
       };
 
-      // 정규 팀 엑셀 출력
       renderChunk(data.mainTeams, false);
 
-      // ⭐️ 대기 팀 엑셀 출력 (누락되었던 부분)
       if (data.waitTeams.length > 0) {
         const waitTitleRow = ws.addRow(["[ 대기 팀 편성 ]", "", "", ""]);
         waitTitleRow.font = { bold: true, color: { argb: 'FF555555' } };
@@ -253,7 +288,6 @@ export default function App() {
         ))}
       </div>
 
-      {/* ⭐️ 누락되었던 대기 팀 웹 화면 출력 복구 */}
       {data.waitTeams.length > 0 && (
         <>
           <h3 className="font-bold text-gray-500 mb-3 text-lg border-b pb-2 mt-8">
@@ -297,7 +331,7 @@ export default function App() {
             placeholder="예: 박지헌, 강정은, 김민우, 심영진, 윤지상"
           />
           <p className="text-sm text-gray-500 mt-2">
-            * 이곳에 입력된 임원진은 <b>서로 같은 팀이 되지 않도록 1명씩 분산 배치</b>됩니다.
+            * 이곳에 입력된 임원진은 <b>서로 같은 팀이 되지 않도록 1명씩 분산 배치</b>되며 <b>무조건 정규 팀(우선)으로 배정</b>됩니다.
           </p>
         </div>
         
