@@ -17,7 +17,7 @@ export default function App() {
   const [rawSixList, setRawSixList] = useState<string[]>([]);
   const [rawSevenList, setRawSevenList] = useState<string[]>([]);
   
-  const [executivesInput, setExecutivesInput] = useState<string>("안형준, 박지헌, 고다성, 강정은, 윤지상, 임유찬");
+  const [executivesInput, setExecutivesInput] = useState<string>("박지헌, 강정은, 김민우, 심영진, 윤지상");
 
   const shuffleArray = <T,>(array: T[]): T[] => {
     return [...array].sort(() => Math.random() - 0.5);
@@ -311,7 +311,7 @@ export default function App() {
     <div className="min-h-screen bg-gray-100 p-8 font-sans">
       <div className="max-w-5xl mx-auto">
         <h1 className="text-4xl font-black mb-10 text-center text-gray-800 tracking-tight">
-          볼링 대회 조 편성 자동화 🎲
+          스노우볼 조 편성 자동화 🎲
         </h1>
 
         <div className="bg-white p-6 rounded-lg shadow-md mb-8 border border-gray-200">
@@ -323,7 +323,7 @@ export default function App() {
             value={executivesInput}
             onChange={(e) => setExecutivesInput(e.target.value)}
             className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="예: 안형준, 박지헌, 고다성"
+            placeholder="예: 박지헌, 강정은, 김민우, 심영진, 윤지상"
           />
           <p className="text-sm text-gray-500 mt-2">
             * 이곳에 입력된 임원진은 <b>서로 같은 팀이 되지 않도록 1명씩 분산 배치</b>되며 <b>무조건 정규 팀(우선)으로 배정</b>됩니다.
