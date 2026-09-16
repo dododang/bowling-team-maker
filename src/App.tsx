@@ -14,39 +14,33 @@ export default function App() {
   const [sevenData, setSevenData] = useState<TeamData | null>(null);
   const [dinnerData, setDinnerData] = useState<string[]>([]);
   
-  // ⭐️ 원본 명단 저장 (다시 섞기 기능을 위해 추가)
   const [rawSixList, setRawSixList] = useState<string[]>([]);
   const [rawSevenList, setRawSevenList] = useState<string[]>([]);
   
-  const [executivesInput, setExecutivesInput] = useState<string>("박지헌, 강정은, 김민우, 심영진, 윤지상");
+  const [executivesInput, setExecutivesInput] = useState<string>("안형준, 박지헌, 고다성, 강정은, 윤지상, 임유찬");
 
   const shuffleArray = <T,>(array: T[]): T[] => {
     return [...array].sort(() => Math.random() - 0.5);
   };
 
-  // ⭐️ 임원진 분산 배치 알고리즘 적용
   const generateTeamsWithExecutives = (list: string[]): TeamData => {
     const execList = executivesInput.split(',').map(name => name.trim()).filter(Boolean);
     const isExecutive = (fullName: string) => execList.some(exec => fullName.includes(exec));
 
-    // 1. 임원진과 일반 멤버를 분리하고 각각 무작위로 섞음
     const execs = shuffleArray(list.filter(isExecutive));
     const regulars = shuffleArray(list.filter(name => !isExecutive(name)));
 
     const teams: string[][] = [];
 
-    // 2. 두 그룹에 사람이 남아있는 동안 팀 구성
     while (execs.length > 0 || regulars.length > 0) {
       const team: string[] = [];
       
-      // 첫 번째 자리: 임원진 우선 배정 (없으면 일반 멤버)
       if (execs.length > 0) {
         team.push(execs.pop()!);
       } else {
         team.push(regulars.pop()!);
       }
       
-      // 두 번째 자리: 일반 멤버 배정 (일반 멤버가 다 떨어지면 남은 임원진끼리 배정)
       if (regulars.length > 0) {
         team.push(regulars.pop()!);
       } else if (execs.length > 0) {
@@ -56,10 +50,9 @@ export default function App() {
       teams.push(team);
     }
 
-    // 3. 완성된 팀들의 순서를 다시 한번 무작위로 섞음 (임원진이 앞번호 팀에 몰리는 현상 방지)
     const finalTeams = shuffleArray(teams);
-
-    const maxTeams = 12; // 정규 최대 12팀
+    const maxTeams = 12; 
+    
     return {
       mainTeams: finalTeams.slice(0, maxTeams),
       waitTeams: finalTeams.slice(maxTeams),
@@ -67,7 +60,6 @@ export default function App() {
     };
   };
 
-  // 엑셀 파일 업로드 핸들러
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -95,19 +87,16 @@ export default function App() {
         if (type.includes('회식')) dinnerList.push(name);
       });
 
-      // 원본 명단 저장
       setRawSixList(sixList);
       setRawSevenList(sevenList);
       setDinnerData(dinnerList);
 
-      // 팀 생성
       setSixData(generateTeamsWithExecutives(sixList));
       setSevenData(generateTeamsWithExecutives(sevenList));
     };
     reader.readAsArrayBuffer(file);
   };
 
-  // ⭐️ 다시 섞기 기능
   const handleReshuffle = () => {
     if (rawSixList.length > 0 && rawSevenList.length > 0) {
       setSixData(generateTeamsWithExecutives(rawSixList));
@@ -194,6 +183,32 @@ export default function App() {
     addTimeSection("6시", sixData);
     addTimeSection("7시", sevenData);
 
+    // ⭐️ 엑셀에도 회식 인원 데이터 반영
+    if (dinnerData.length > 0) {
+      const dinnerTitleRow = ws.addRow(["회식 참여 인원", "", "", ""]);
+      dinnerTitleRow.font = { bold: true, size: 14 };
+      dinnerTitleRow.alignment = { horizontal: 'center', vertical: 'middle' };
+      ws.mergeCells(`A${dinnerTitleRow.number}:D${dinnerTitleRow.number}`);
+      
+      const chunkedDinner = [];
+      for (let i = 0; i < dinnerData.length; i += 4) {
+        chunkedDinner.push(dinnerData.slice(i, i + 4));
+      }
+      
+      chunkedDinner.forEach(chunk => {
+         const row = ws.addRow([chunk[0] || "", chunk[1] || "", chunk[2] || "", chunk[3] || ""]);
+         row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+           if (colNumber <= 4 && (chunk[0] || chunk[1] || chunk[2] || chunk[3])) {
+              cell.alignment = { horizontal: 'center', vertical: 'middle' };
+              cell.border = {
+                top: { style: 'thin' }, left: { style: 'thin' },
+                bottom: { style: 'thin' }, right: { style: 'thin' }
+              };
+           }
+         });
+      });
+    }
+
     const buffer = await wb.xlsx.writeBuffer();
     saveAs(new Blob([buffer]), "볼링조편성_결과.xlsx");
   };
@@ -239,7 +254,7 @@ export default function App() {
             value={executivesInput}
             onChange={(e) => setExecutivesInput(e.target.value)}
             className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="예: 박지헌, 강정은, 김민우, 심영진, 윤지상"
+            placeholder="예: 안형준, 박지헌, 고다성"
           />
           <p className="text-sm text-gray-500 mt-2">
             * 이곳에 입력된 임원진은 <b>서로 같은 팀이 되지 않도록 1명씩 분산 배치</b>됩니다.
@@ -259,7 +274,6 @@ export default function App() {
 
           {sixData && sevenData && (
             <>
-              {/* ⭐️ 새로 추가된 다시 섞기 버튼 */}
               <button 
                 onClick={handleReshuffle}
                 className="bg-blue-600 text-white px-8 py-4 rounded-xl font-bold text-lg shadow-lg hover:bg-blue-500 hover:scale-105 transition-all duration-200"
@@ -281,6 +295,16 @@ export default function App() {
           <div className="space-y-8 animate-fade-in-up">
             {renderTeamSection('6시', sixData)}
             {renderTeamSection('7시', sevenData)}
+
+            {/* ⭐️ 누락되었던 회식 인원 UI 복구 */}
+            <div className="p-6 bg-white rounded-lg shadow-md border-t-4 border-orange-400">
+              <h2 className="text-2xl font-bold mb-4 text-orange-600">
+                🍻 회식 참여 인원 (총 {dinnerData.length}명)
+              </h2>
+              <div className="p-5 bg-orange-50 border border-orange-100 rounded-lg text-gray-800 font-medium leading-relaxed shadow-sm">
+                {dinnerData.length > 0 ? dinnerData.join(', ') : '참여 인원이 없습니다.'}
+              </div>
+            </div>
           </div>
         )}
       </div>
